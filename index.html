@@ -1,0 +1,1178 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#000000">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>Real-Time Twitter Client</title>
+    
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        
+        :root {
+            --primary: #1DA1F2;
+            --bg: #000000;
+            --surface: #16181c;
+            --border: #2f3336;
+            --text: #e7e9ea;
+            --muted: #71767b;
+            --success: #17bf63;
+            --danger: #f4212e;
+        }
+        
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg); 
+            color: var(--text); 
+            height: 100vh; 
+            overflow: hidden;
+            -webkit-overflow-scrolling: touch;
+        }
+        
+        .app { 
+            height: 100vh; 
+            display: flex; 
+            flex-direction: column;
+            padding-top: env(safe-area-inset-top);
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+        
+        /* Header */
+        .header { 
+            height: 53px; 
+            background: rgba(0,0,0,0.95); 
+            backdrop-filter: blur(20px);
+            padding: 0 16px; 
+            display: flex; 
+            align-items: center; 
+            justify-content: space-between;
+            border-bottom: 1px solid var(--border); 
+            position: sticky; 
+            top: 0; 
+            z-index: 100;
+        }
+        
+        .logo { font-size: 24px; font-weight: bold; }
+        
+        .live-indicator {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: var(--danger);
+            color: white;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 700;
+            animation: pulse 2s infinite;
+        }
+        
+        .live-dot {
+            width: 6px;
+            height: 6px;
+            background: white;
+            border-radius: 50%;
+            animation: blink 1s infinite;
+        }
+        
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.8; } }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+        
+        .header-actions {
+            display: flex;
+            gap: 12px;
+        }
+        
+        .icon-btn {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: transparent;
+            border: none;
+            color: var(--text);
+            font-size: 18px;
+            cursor: pointer;
+            position: relative;
+        }
+        
+        .icon-btn:active { background: rgba(255,255,255,0.1); }
+        
+        .badge {
+            position: absolute;
+            top: -2px;
+            right: -2px;
+            background: var(--primary);
+            color: white;
+            font-size: 10px;
+            padding: 2px 5px;
+            border-radius: 10px;
+            min-width: 18px;
+            text-align: center;
+        }
+        
+        /* Connection Status */
+        .connection-bar {
+            height: 2px;
+            background: var(--success);
+            transition: all 0.3s;
+        }
+        
+        .connection-bar.offline {
+            height: 24px;
+            background: var(--danger);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            color: white;
+        }
+        
+        /* Auto Refresh Banner */
+        .refresh-banner {
+            background: var(--primary);
+            color: white;
+            text-align: center;
+            padding: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transform: translateY(-100%);
+            transition: transform 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        
+        .refresh-banner.show {
+            transform: translateY(0);
+        }
+        
+        .refresh-spinner {
+            width: 14px;
+            height: 14px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        
+        /* Tabs */
+        .tabs { 
+            height: 50px; 
+            background: rgba(0,0,0,0.95);
+            backdrop-filter: blur(20px);
+            display: flex; 
+            border-bottom: 1px solid var(--border);
+            position: sticky;
+            top: 53px;
+            z-index: 98;
+        }
+        
+        .tab { 
+            flex: 1; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            font-size: 13px; 
+            cursor: pointer;
+            position: relative;
+            transition: all 0.2s;
+            color: var(--muted);
+            flex-direction: column;
+            gap: 4px;
+        }
+        
+        .tab.active { 
+            color: var(--text); 
+            font-weight: 700;
+        }
+        
+        .tab.active::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 25%;
+            right: 25%;
+            height: 3px;
+            background: var(--primary);
+            border-radius: 3px 3px 0 0;
+        }
+        
+        /* Content */
+        .content-area {
+            flex: 1;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            position: relative;
+        }
+        
+        /* Pull to Refresh */
+        .ptr-indicator {
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--primary);
+            font-size: 14px;
+            gap: 8px;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        
+        .ptr-indicator.show { opacity: 1; }
+        
+        /* Search */
+        .search-container {
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border);
+            position: sticky;
+            top: 0;
+            background: var(--bg);
+            z-index: 10;
+        }
+        
+        .search-box {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 25px;
+            padding: 12px 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .search-box input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: var(--text);
+            font-size: 15px;
+            outline: none;
+        }
+        
+        .search-box input::placeholder { color: var(--muted); }
+        
+        /* User Card */
+        .user-card {
+            display: flex;
+            padding: 16px;
+            border-bottom: 1px solid var(--border);
+            cursor: pointer;
+            transition: background 0.2s;
+            animation: slideIn 0.3s ease;
+        }
+        
+        .user-card:active { background: rgba(255,255,255,0.05); }
+        
+        .user-avatar {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            margin-right: 12px;
+            flex-shrink: 0;
+            background-size: cover;
+            background-position: center;
+            position: relative;
+        }
+        
+        .online-badge {
+            position: absolute;
+            bottom: 2px;
+            right: 2px;
+            width: 12px;
+            height: 12px;
+            background: var(--success);
+            border: 2px solid var(--bg);
+            border-radius: 50%;
+        }
+        
+        .user-info { flex: 1; }
+        .user-name { font-weight: 700; font-size: 15px; display: flex; align-items: center; gap: 4px; }
+        .verified { color: var(--primary); font-size: 14px; }
+        .user-handle { color: var(--muted); font-size: 14px; }
+        .user-bio { font-size: 14px; color: var(--text); margin-top: 4px; line-height: 1.3; }
+        
+        .follow-btn {
+            padding: 8px 16px;
+            border-radius: 20px;
+            border: 1px solid var(--primary);
+            background: transparent;
+            color: var(--primary);
+            font-weight: 700;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .follow-btn.following {
+            background: var(--primary);
+            color: white;
+        }
+        
+        /* Tweet */
+        .tweet { 
+            display: flex; 
+            padding: 12px 16px; 
+            border-bottom: 1px solid var(--border); 
+            cursor: pointer; 
+            transition: background 0.2s;
+            animation: slideIn 0.3s ease;
+            position: relative;
+        }
+        
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .tweet.new {
+            background: rgba(29,161,242,0.05);
+            border-left: 3px solid var(--primary);
+        }
+        
+        .tweet:hover { background: rgba(255,255,255,0.02); }
+        .tweet:active { background: rgba(29,161,242,0.1); }
+        
+        .new-badge {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: var(--primary);
+            color: white;
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: 700;
+        }
+        
+        .avatar { 
+            width: 48px; 
+            height: 48px; 
+            border-radius: 50%; 
+            margin-right: 12px; 
+            flex-shrink: 0;
+            background-size: cover;
+            background-position: center;
+        }
+        
+        .tweet-content { flex: 1; min-width: 0; }
+        
+        .tweet-header { 
+            display: flex; 
+            align-items: center; 
+            margin-bottom: 4px; 
+            flex-wrap: wrap;
+            gap: 4px;
+        }
+        
+        .name { font-weight: 700; font-size: 15px; }
+        .handle, .time { color: var(--muted); font-size: 15px; }
+        
+        .text { 
+            font-size: 15px; 
+            line-height: 1.4; 
+            margin-bottom: 12px; 
+            word-break: break-word;
+        }
+        
+        .media { 
+            width: 100%; 
+            border-radius: 16px; 
+            margin-bottom: 12px;
+            max-height: 300px;
+            object-fit: cover;
+        }
+        
+        .video-container {
+            position: relative;
+            width: 100%;
+            padding-bottom: 56.25%;
+            border-radius: 16px;
+            overflow: hidden;
+            margin-bottom: 12px;
+            background: var(--surface);
+        }
+        
+        .video-container iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border: none;
+            border-radius: 16px;
+        }
+        
+        .actions { 
+            display: flex; 
+            justify-content: space-between; 
+            max-width: 425px;
+        }
+        
+        .action { 
+            display: flex; 
+            align-items: center; 
+            padding: 8px; 
+            border-radius: 50%; 
+            color: var(--muted); 
+            font-size: 13px; 
+            transition: all 0.2s; 
+            cursor: pointer;
+            gap: 6px;
+            user-select: none;
+        }
+        
+        .action:active { transform: scale(0.9); }
+        .action.liked { color: #f91880; }
+        .action.retweeted { color: #00ba7c; }
+        .action.bookmarked { color: var(--success); }
+        
+        /* Stats */
+        .stats {
+            display: flex;
+            gap: 24px;
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border);
+            font-size: 14px;
+        }
+        
+        .stat { color: var(--muted); }
+        .stat strong { color: var(--text); margin-right: 4px; }
+        
+        /* Section Title */
+        .section-title {
+            padding: 16px;
+            font-size: 20px;
+            font-weight: 800;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .count-badge {
+            background: var(--surface);
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 14px;
+            color: var(--muted);
+        }
+        
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--muted);
+        }
+        
+        .empty-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+        
+        /* History */
+        .history-item {
+            display: flex;
+            align-items: center;
+            padding: 16px;
+            border-bottom: 1px solid var(--border);
+            cursor: pointer;
+            animation: slideIn 0.2s ease;
+        }
+        
+        .history-item:active { background: rgba(255,255,255,0.05); }
+        
+        .history-text {
+            flex: 1;
+            margin-left: 12px;
+        }
+        
+        .history-query { font-size: 15px; color: var(--text); }
+        .history-time { font-size: 12px; color: var(--muted); margin-top: 2px; }
+        
+        /* FAB */
+        .fab { 
+            position: fixed; 
+            right: 20px; 
+            bottom: calc(25px + env(safe-area-inset-bottom)); 
+            width: 56px; 
+            height: 56px; 
+            border-radius: 50%; 
+            background: var(--primary); 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            font-size: 24px;
+            box-shadow: 0 4px 15px rgba(29,161,242,0.4);
+            cursor: pointer;
+            z-index: 100;
+            transition: transform 0.2s;
+        }
+        
+        .fab:active { transform: scale(0.9); }
+        
+        /* Toast */
+        .toast {
+            position: fixed;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background: var(--primary);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 25px;
+            font-size: 14px;
+            opacity: 0;
+            transition: all 0.3s;
+            z-index: 1000;
+            backdrop-filter: blur(10px);
+        }
+        
+        .toast.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+        
+        /* Loading */
+        .loading { 
+            text-align: center; 
+            padding: 40px; 
+            color: var(--muted);
+        }
+        
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid var(--border);
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 16px;
+        }
+        
+        @keyframes spin { to { transform: rotate(360deg); } }
+        
+        /* Last Updated */
+        .last-updated {
+            text-align: center;
+            padding: 8px;
+            font-size: 12px;
+            color: var(--muted);
+            border-bottom: 1px solid var(--border);
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <script type="text/babel">
+        const { useState, useEffect, useCallback, useRef } = React;
+
+        // Storage Manager
+        const Storage = {
+            get: (key) => {
+                try {
+                    return JSON.parse(localStorage.getItem(`rt_twitter_${key}`)) || [];
+                } catch { return []; }
+            },
+            set: (key, value) => localStorage.setItem(`rt_twitter_${key}`, JSON.stringify(value)),
+            clear: () => {
+                Object.keys(localStorage).forEach(key => {
+                    if (key.startsWith('rt_twitter_')) localStorage.removeItem(key);
+                });
+            }
+        };
+
+        // Real-time Data Generator
+        const generateLiveTweet = (id, isNew = false) => {
+            const users = [
+                { name: "Elon Musk", handle: "@elonmusk", verified: true, avatar: "https://pbs.twimg.com/profile_images/1683325380441128960/yRsRRjGO_400x400.jpg" },
+                { name: "NASA", handle: "@NASA", verified: true, avatar: "https://pbs.twimg.com/profile_images/1321163587679784960/0ZxKlEKB_400x400.jpg" },
+                { name: "BBC Breaking", handle: "@BBCBreaking", verified: true, avatar: "https://pbs.twimg.com/profile_images/1150716997254209536/MfG1xhh1_400x400.jpg" },
+                { name: "Cristiano Ronaldo", handle: "@Cristiano", verified: true, avatar: "https://pbs.twimg.com/profile_images/1594440889426165763/2UovQjui_400x400.jpg" },
+                { name: "TechCrunch", handle: "@TechCrunch", verified: true, avatar: "https://pbs.twimg.com/profile_images/1096066608034918400/m8J7q5J-_400x400.jpg" },
+                { name: "Reuters", handle: "@Reuters", verified: true, avatar: "https://pbs.twimg.com/profile_images/1194751949821939712/3VBu4_Sa_400x400.jpg" },
+                { name: "Bill Gates", handle: "@BillGates", verified: true, avatar: "https://pbs.twimg.com/profile_images/1564398871996174336/M-hffHw5_400x400.jpg" },
+                { name: "CNN", handle: "@CNN", verified: true, avatar: "https://pbs.twimg.com/profile_images/1278259160644227072/UD9Zqijk_400x400.jpg" }
+            ];
+            
+            const topics = [
+                "🚀 SpaceX launch", "⚽ Football update", "🌍 Breaking News", 
+                "💻 Tech announcement", "📱 New gadget", "🤖 AI update",
+                "⚡ Live update", "🎬 Entertainment", "🏏 Sports news",
+                "💰 Crypto market", "🎮 Gaming", "📊 Stock alert", "🔬 Science"
+            ];
+            
+            const user = users[Math.floor(Math.random() * users.length)];
+            const topic = topics[Math.floor(Math.random() * topics.length)];
+            
+            const texts = [
+                `${topic} - ${new Date().toLocaleTimeString()} 🚨`,
+                `Breaking: ${topic}! Details in thread 👇`,
+                `Just in: ${topic} - developing story...`,
+                `${topic}! This is huge 🚀 #Breaking`,
+                `Update: ${topic} - stay tuned for more`
+            ];
+            
+            const hasMedia = Math.random() > 0.4;
+            const hasVideo = hasMedia && Math.random() > 0.5;
+            
+            return {
+                id: id || Date.now(),
+                user: user.name,
+                handle: user.handle,
+                verified: user.verified,
+                avatar: user.avatar,
+                text: texts[Math.floor(Math.random() * texts.length)],
+                hasImage: hasMedia && !hasVideo,
+                hasVideo: hasVideo,
+                videoUrl: hasVideo ? "https://www.youtube.com/embed/dQw4w9WgXcQ" : null,
+                imageUrl: hasMedia && !hasVideo ? `https://source.unsplash.com/random/400x300?${topic.split(' ')[1]}&sig=${id}` : null,
+                likes: Math.floor(Math.random() * 100000),
+                retweets: Math.floor(Math.random() * 50000),
+                replies: Math.floor(Math.random() * 10000),
+                timestamp: new Date(),
+                liked: false,
+                retweeted: false,
+                bookmarked: false,
+                isNew: isNew
+            };
+        };
+
+        const formatTime = (date) => {
+            const now = new Date();
+            const diff = Math.floor((now - new Date(date)) / 1000);
+            if (diff < 60) return 'এখন';
+            if (diff < 3600) return `${Math.floor(diff/60)}ম`;
+            if (diff < 86400) return `${Math.floor(diff/3600)}ঘ`;
+            return `${Math.floor(diff/86400)}দিন`;
+        };
+
+        const formatNumber = (num) => {
+            if (num >= 1000000) return (num/1000000).toFixed(1) + 'M';
+            if (num >= 1000) return (num/1000).toFixed(1) + 'K';
+            return num.toString();
+        };
+
+        const App = () => {
+            const [activeTab, setActiveTab] = useState('Home');
+            const [tweets, setTweets] = useState([]);
+            const [searchQuery, setSearchQuery] = useState('');
+            const [searchResults, setSearchResults] = useState([]);
+            const [followedUsers, setFollowedUsers] = useState([]);
+            const [bookmarks, setBookmarks] = useState([]);
+            const [history, setHistory] = useState([]);
+            const [viewedTweets, setViewedTweets] = useState([]);
+            const [loading, setLoading] = useState(true);
+            const [isOnline, setIsOnline] = useState(true);
+            const [showRefreshBanner, setShowRefreshBanner] = useState(false);
+            const [lastUpdated, setLastUpdated] = useState(new Date());
+            const [newTweetCount, setNewTweetCount] = useState(0);
+            const [showToast, setShowToast] = useState(false);
+            const [toastMessage, setToastMessage] = useState('');
+            const [refreshing, setRefreshing] = useState(false);
+
+            const feedRef = useRef(null);
+            const autoRefreshRef = useRef(null);
+            const liveUpdateRef = useRef(null);
+
+            // Load initial data
+            useEffect(() => {
+                const loadData = () => {
+                    setFollowedUsers(Storage.get('followed'));
+                    setBookmarks(Storage.get('bookmarks'));
+                    setHistory(Storage.get('history'));
+                    setViewedTweets(Storage.get('viewed'));
+
+                    // Generate initial tweets
+                    const initial = [];
+                    for (let i = 0; i < 10; i++) {
+                        initial.push(generateLiveTweet(Date.now() - i * 60000));
+                    }
+                    setTweets(initial);
+                    setLoading(false);
+                    showToastMessage('✅ রিয়েল-টাইম ফিড সক্রিয়');
+                };
+
+                setTimeout(loadData, 1000);
+
+                // Online status
+                window.addEventListener('online', () => {
+                    setIsOnline(true);
+                    showToastMessage('🌐 সংযোগ পুনঃস্থাপিত');
+                });
+                window.addEventListener('offline', () => setIsOnline(false));
+            }, []);
+
+            // Auto refresh every 30 seconds
+            useEffect(() => {
+                if (loading) return;
+
+                autoRefreshRef.current = setInterval(() => {
+                    performAutoRefresh();
+                }, 30000); // 30 seconds
+
+                // Live new tweets every 10-15 seconds
+                liveUpdateRef.current = setInterval(() => {
+                    if (Math.random() > 0.3) {
+                        addNewLiveTweet();
+                    }
+                }, 12000);
+
+                return () => {
+                    clearInterval(autoRefreshRef.current);
+                    clearInterval(liveUpdateRef.current);
+                };
+            }, [loading, tweets]);
+
+            // Save to storage
+            useEffect(() => Storage.set('followed', followedUsers), [followedUsers]);
+            useEffect(() => Storage.set('bookmarks', bookmarks), [bookmarks]);
+            useEffect(() => Storage.set('history', history), [history]);
+            useEffect(() => Storage.set('viewed', viewedTweets), [viewedTweets]);
+
+            const showToastMessage = (msg) => {
+                setToastMessage(msg);
+                setShowToast(true);
+                setTimeout(() => setShowToast(false), 3000);
+                if (navigator.vibrate) navigator.vibrate(50);
+            };
+
+            const performAutoRefresh = () => {
+                setShowRefreshBanner(true);
+                
+                setTimeout(() => {
+                    // Fetch new tweets (simulation)
+                    const newTweets = [];
+                    for (let i = 0; i < 3; i++) {
+                        newTweets.push(generateLiveTweet(Date.now() + i, true));
+                    }
+                    
+                    setTweets(prev => [...newTweets, ...prev].slice(0, 50));
+                    setNewTweetCount(prev => prev + newTweets.length);
+                    setLastUpdated(new Date());
+                    setShowRefreshBanner(false);
+                    
+                    if (newTweets.length > 0) {
+                        showToastMessage(`🔄 ${newTweets.length} নতুন টুইট আসছে`);
+                    }
+                }, 1500);
+            };
+
+            const addNewLiveTweet = () => {
+                const newTweet = generateLiveTweet(Date.now(), true);
+                setTweets(prev => [newTweet, ...prev].slice(0, 50));
+                setNewTweetCount(prev => prev + 1);
+                
+                if (navigator.vibrate) navigator.vibrate([30, 50, 30]);
+            };
+
+            const manualRefresh = () => {
+                setRefreshing(true);
+                performAutoRefresh();
+                setTimeout(() => setRefreshing(false), 2000);
+            };
+
+            const handleSearch = (query) => {
+                if (!query.trim()) return;
+                
+                setSearchQuery(query);
+                const users = [
+                    { name: "Elon Musk", handle: "@elonmusk", verified: true, bio: "Technoking of Tesla", followers: "180M", avatar: "https://pbs.twimg.com/profile_images/1683325380441128960/yRsRRjGO_400x400.jpg" },
+                    { name: "NASA", handle: "@NASA", verified: true, bio: "Exploring the universe", followers: "75M", avatar: "https://pbs.twimg.com/profile_images/1321163587679784960/0ZxKlEKB_400x400.jpg" },
+                    { name: "BBC Breaking", handle: "@BBCBreaking", verified: true, bio: "Breaking news", followers: "50M", avatar: "https://pbs.twimg.com/profile_images/1150716997254209536/MfG1xhh1_400x400.jpg" },
+                    { name: "Cristiano Ronaldo", handle: "@Cristiano", verified: true, bio: "CR7", followers: "110M", avatar: "https://pbs.twimg.com/profile_images/1594440889426165763/2UovQjui_400x400.jpg" }
+                ].filter(u => 
+                    u.name.toLowerCase().includes(query.toLowerCase()) ||
+                    u.handle.toLowerCase().includes(query.toLowerCase())
+                );
+                
+                setSearchResults(users);
+                
+                const newHistory = [{ query, time: new Date().toISOString() }, ...history].slice(0, 20);
+                setHistory(newHistory);
+            };
+
+            const toggleFollow = (user) => {
+                const isFollowing = followedUsers.find(u => u.handle === user.handle);
+                if (isFollowing) {
+                    setFollowedUsers(prev => prev.filter(u => u.handle !== user.handle));
+                    showToastMessage(`আনফলো করেছেন ${user.name}`);
+                } else {
+                    setFollowedUsers(prev => [user, ...prev]);
+                    showToastMessage(`ফলো করেছেন ${user.name}`);
+                }
+            };
+
+            const toggleBookmark = (tweet, e) => {
+                e.stopPropagation();
+                const isBookmarked = bookmarks.find(t => t.id === tweet.id);
+                if (isBookmarked) {
+                    setBookmarks(prev => prev.filter(t => t.id !== tweet.id));
+                    showToastMessage('বুকমার্ক সরানো হয়েছে');
+                } else {
+                    setBookmarks(prev => [{...tweet, bookmarked: true}, ...prev]);
+                    showToastMessage('🔖 বুকমার্ক করা হয়েছে');
+                }
+                
+                setTweets(prev => prev.map(t => 
+                    t.id === tweet.id ? {...t, bookmarked: !t.bookmarked} : t
+                ));
+            };
+
+            const likeTweet = (id, e) => {
+                e.stopPropagation();
+                setTweets(prev => prev.map(t => 
+                    t.id === id ? {...t, liked: !t.liked, likes: t.liked ? t.likes - 1 : t.likes + 1} : t
+                ));
+            };
+
+            const viewTweet = (tweet) => {
+                if (!viewedTweets.find(t => t.id === tweet.id)) {
+                    setViewedTweets(prev => [tweet, ...prev].slice(0, 100));
+                }
+                // Mark as not new after viewing
+                setTweets(prev => prev.map(t => 
+                    t.id === tweet.id ? {...t, isNew: false} : t
+                ));
+            };
+
+            const showNewTweets = () => {
+                setNewTweetCount(0);
+                feedRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+            };
+
+            // Pull to refresh handlers
+            const handleTouchStart = (e) => {
+                if (feedRef.current.scrollTop === 0) {
+                    setRefreshing(true);
+                }
+            };
+
+            const handleTouchEnd = () => {
+                if (refreshing) {
+                    setTimeout(() => {
+                        manualRefresh();
+                        setRefreshing(false);
+                    }, 1000);
+                }
+            };
+
+            const renderHome = () => (
+                <div>
+                    <div className="last-updated">
+                        সর্বশেষ আপডেট: {lastUpdated.toLocaleTimeString('bn-BD')}
+                    </div>
+                    
+                    {newTweetCount > 0 && (
+                        <div className="refresh-banner show" onClick={showNewTweets}>
+                            🔔 {newTweetCount} নতুন টুইট - দেখতে ট্যাপ করুন
+                        </div>
+                    )}
+                    
+                    {refreshing && (
+                        <div className="ptr-indicator show">
+                            <div className="spinner" style={{width: '20px', height: '20px', margin: 0}}></div>
+                            রিফ্রেশ হচ্ছে...
+                        </div>
+                    )}
+                    
+                    {tweets.map(tweet => (
+                        <div 
+                            key={tweet.id} 
+                            className={`tweet ${tweet.isNew ? 'new' : ''}`}
+                            onClick={() => viewTweet(tweet)}
+                        >
+                            {tweet.isNew && <span className="new-badge">NEW</span>}
+                            <div className="avatar" style={{backgroundImage: `url(${tweet.avatar})`}}></div>
+                            <div className="tweet-content">
+                                <div className="tweet-header">
+                                    <span className="name">{tweet.user}</span>
+                                    {tweet.verified && <span className="verified">✓</span>}
+                                    <span className="handle">{tweet.handle}</span>
+                                    <span className="time">· {formatTime(tweet.timestamp)}</span>
+                                </div>
+                                <div className="text">{tweet.text}</div>
+                                
+                                {tweet.hasVideo && (
+                                    <div className="video-container">
+                                        <iframe 
+                                            src={tweet.videoUrl} 
+                                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                                            allowFullScreen
+                                            title="video"
+                                        ></iframe>
+                                    </div>
+                                )}
+                                
+                                {tweet.hasImage && (
+                                    <img 
+                                        src={tweet.imageUrl} 
+                                        className="media" 
+                                        alt="" 
+                                        loading="lazy"
+                                        onError={(e) => e.target.style.display='none'}
+                                    />
+                                )}
+                                
+                                <div className="actions">
+                                    <div className="action">💬 {formatNumber(tweet.replies)}</div>
+                                    <div className={`action ${tweet.retweeted ? 'retweeted' : ''}`}>🔄 {formatNumber(tweet.retweets)}</div>
+                                    <div 
+                                        className={`action ${tweet.liked ? 'liked' : ''}`} 
+                                        onClick={(e) => likeTweet(tweet.id, e)}
+                                    >
+                                        {tweet.liked ? '❤️' : '🤍'} {formatNumber(tweet.likes)}
+                                    </div>
+                                    <div 
+                                        className={`action ${tweet.bookmarked ? 'bookmarked' : ''}`} 
+                                        onClick={(e) => toggleBookmark(tweet, e)}
+                                    >
+                                        {tweet.bookmarked ? '🔖' : '📑'}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            );
+
+            const renderSearch = () => (
+                <div>
+                    <div className="search-container">
+                        <div className="search-box">
+                            <span>🔍</span>
+                            <input 
+                                type="text" 
+                                placeholder="ইউজার খুঁজুন..." 
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                onKeyPress={(e) => e.key === 'Enter' && handleSearch(searchQuery)}
+                            />
+                        </div>
+                    </div>
+                    
+                    {!searchQuery && history.length > 0 && (
+                        <div>
+                            <div className="section-title">
+                                সাম্প্রতিক অনুসন্ধান
+                                <span className="count-badge">{history.length}</span>
+                            </div>
+                            {history.map((h, i) => (
+                                <div key={i} className="history-item" onClick={() => handleSearch(h.query)}>
+                                    <span>🕐</span>
+                                    <div className="history-text">
+                                        <div className="history-query">{h.query}</div>
+                                        <div className="history-time">{new Date(h.time).toLocaleString('bn-BD')}</div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                    
+                    {searchResults.map(user => (
+                        <div key={user.handle} className="user-card">
+                            <div className="user-avatar" style={{backgroundImage: `url(${user.avatar})`}}>
+                                <div className="online-badge"></div>
+                            </div>
+                            <div className="user-info">
+                                <div className="user-name">{user.name} {user.verified && <span className="verified">✓</span>}</div>
+                                <div className="user-handle">{user.handle}</div>
+                                <div className="user-bio">{user.bio}</div>
+                                <div className="stats">
+                                    <span className="stat"><strong>{user.followers}</strong> ফলোয়ার</span>
+                                </div>
+                            </div>
+                            <button 
+                                className={`follow-btn ${followedUsers.find(u => u.handle === user.handle) ? 'following' : ''}`}
+                                onClick={() => toggleFollow(user)}
+                            >
+                                {followedUsers.find(u => u.handle === user.handle) ? 'ফলোয়িং' : 'ফলো করুন'}
+                            </button>
+                        </div>
+                    ))}
+                </div>
+            );
+
+            const renderFollowing = () => (
+                <div>
+                    <div className="section-title">
+                        ফলো করছেন
+                        <span className="count-badge">{followedUsers.length}</span>
+                    </div>
+                    {followedUsers.length === 0 ? (
+                        <div className="empty-state">
+                            <div className="empty-icon">👥</div>
+                            <div>কাউকে ফলো করেননি</div>
+                            <div style={{fontSize: 14, marginTop: 8}}>সার্চ থেকে ইউজার ফলো করুন</div>
+                        </div>
+                    ) : (
+                        followedUsers.map(user => (
+                            <div key={user.handle} className="user-card">
+                                <div className="user-avatar" style={{backgroundImage: `url(${user.avatar})`}}>
+                                    <div className="online-badge"></div>
+                                </div>
+                                <div className="user-info">
+                                    <div className="user-name">{user.name} {user.verified && <span className="verified">✓</span>}</div>
+                                    <div className="user-handle">{user.handle}</div>
+                                    <div className="user-bio">{user.bio}</div>
+                                </div>
+                                <button className="follow-btn following" onClick={() => toggleFollow(user)}>ফলোয়িং</button>
+                            </div>
+                        ))
+                    )}
+                </div>
+            );
+
+            const renderBookmarks = () => (
+                <div>
+                    <div className="section-title">
+                        বুকমার্ক
+                        <span className="count-badge">{bookmarks.length}</span>
+                    </div>
+                    {bookmarks.length === 0 ? (
+                        <div className="empty-state">
+                            <div className="empty-icon">🔖</div>
+                            <div>কোনো বুকমার্ক নেই</div>
+                        </div>
+                    ) : (
+                        bookmarks.map(tweet => (
+                            <div key={tweet.id} className="tweet">
+                                <div className="avatar" style={{backgroundImage: `url(${tweet.avatar})`}}></div>
+                                <div className="tweet-content">
+                                    <div className="tweet-header">
+                                        <span className="name">{tweet.user}</span>
+                                        <span className="handle">{tweet.handle}</span>
+                                    </div>
+                                    <div className="text">{tweet.text}</div>
+                                    <div className="actions">
+                                        <div className="action bookmarked" onClick={(e) => toggleBookmark(tweet, e)}>
+                                            🔖 বুকমার্ক সরান
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        ))
+                    )}
+                </div>
+            );
+
+            const renderHistory = () => (
+                <div>
+                    <div className="section-title">
+                        দেখা টুইট
+                        <span className="count-badge">{viewedTweets.length}</span>
+                    </div>
+                    {viewedTweets.length === 0 ? (
+                        <div className="empty-state">
+                            <div className="empty-icon">👁️</div>
+                            <div>কিছু দেখা হয়নি</div>
+                        </div>
+                    ) : (
+                        viewedTweets.map(tweet => (
+                            <div key={tweet.id} className="tweet">
+                                <div className="avatar" style={{backgroundImage: `url(${tweet.avatar})`}}></div>
+                                <div className="tweet-content">
+                                    <div className="tweet-header">
+                                        <span className="name">{tweet.user}</span>
+                                        <span className="handle">{tweet.handle}</span>
+                                        <span className="time">· {formatTime(tweet.timestamp)}</span>
+                                    </div>
+                                    <div className="text">{tweet.text}</div>
+                                </div>
+                            </div>
+                        ))
+                    )}
+                </div>
+            );
+
+            if (loading) {
+                return (
+                    <div className="app">
+                        <div className="header">
+                            <div className="logo">𝕏</div>
+                            <div className="live-indicator"><div className="live-dot"></div>LIVE</div>
+                        </div>
+                        <div className="loading">
+                            <div className="spinner"></div>
+                            <div>রিয়েল-টাইম ফিড লোড হচ্ছে...</div>
+                            <div style={{fontSize: '12px', marginTop: 8, color: 'var(--muted)'}}>প্রতি ৩০ সেকেন্ডে অটো-রিফ্রেশ</div>
+                        </div>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="app">
+                    <div className={`connection-bar ${!isOnline ? 'offline' : ''}`}>
+                        {!isOnline && '⚠️ অফলাইন - সংযোগ চেক করুন'}
+                    </div>
+                    
+                    <div className="header">
+                        <div className="logo">𝕏</div>
+                        <div className="live-indicator">
+                            <div className="live-dot"></div>
+                            LIVE
+                        </div>
+                        <div className="header-actions">
+                            <button className="icon-btn" onClick={() => setActiveTab('Bookmarks')}>
+                                🔖
+                                {bookmarks.length > 0 && <span className="badge">{bookmarks.length}</span>}
+                            </button>
+                            <button className="icon-btn" onClick={() => setActiveTab('History')}>🕐</button>
+                        </div>
+                    </div>
+                    
+                    {showRefreshBanner && (
+                        <div className="refresh-banner show">
+                            <div className="refresh-spinner"></div>
+                            নতুন টুইট আসছে...
+                        </div>
+                    )}
+                    
+                    <div className="tabs">
+                        <div className={`tab ${activeTab === 'Home' ? 'active' : ''}`} onClick={() => setActiveTab('Home')}>🏠<span>হোম</span></div>
+                        <div className={`tab ${activeTab === 'Search' ? 'active' : ''}`} onClick={() => setActiveTab('Search')}>🔍<span>খুঁজুন</span></div>
+                        <div className={`tab ${activeTab === 'Following' ? 'active' : ''}`} onClick={() => setActiveTab('Following')}>👥<span>ফলোয়িং</span></div>
+                        <div className={`tab ${activeTab === 'Notifications' ? 'active' : ''}`} onClick={() => setActiveTab('Notifications')}>🔔<span>নোটিফ</span></div>
+                    </div>
+
+                    <div 
+                        className="content-area" 
+                        ref={feedRef}
+                        onTouchStart={handleTouchStart}
+                        onTouchEnd={handleTouchEnd}
+                    >
+                        {activeTab === 'Home' && renderHome()}
+                        {activeTab === 'Search' && renderSearch()}
+                        {activeTab === 'Following' && renderFollowing()}
+                        {activeTab === 'Bookmarks' && renderBookmarks()}
+                        {activeTab === 'History' && renderHistory()}
+                        {activeTab === 'Notifications' && (
+                            <div className="empty-state">
+                                <div className="empty-icon">🔔</div>
+                                <div>কোনো নোটিফিকেশন নেই</div>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="fab" onClick={() => showToastMessage('পোস্ট ফিচার শীঘ্রই আসছে!')}>✍️</div>
+                    
+                    <div className={`toast ${showToast ? 'show' : ''}`}>{toastMessage}</div>
+                </div>
+            );
+        };
+
+        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+    </script>
+</body>
+</html>
